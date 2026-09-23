@@ -79,21 +79,25 @@ class _SupabaseCursor:
                 for row in (response.data or [])
             ]
         elif normalized.startswith("DELETE FROM SUBTASKS"):
-            self.client.table("subtasks").delete().eq("task_id", parameters[0]).execute()
+            query = self.client.table("subtasks").delete().eq("task_id", parameters[0])
+            if "SOURCE" in normalized:
+                query = query.eq("source", parameters[1])
+            query.execute()
         elif normalized.startswith("INSERT INTO SUBTASKS"):
             self.client.table("subtasks").insert({
                 "task_id": parameters[0],
                 "subtask": parameters[1],
+                "source": parameters[2] if len(parameters) > 2 else "ai",
             }).execute()
         elif normalized.startswith("SELECT ID, SUBTASK, COMPLETED"):
             response = (
                 self.client.table("subtasks")
-                .select("id, subtask, completed")
+                .select("id, subtask, completed, source")
                 .eq("task_id", parameters[0])
                 .execute()
             )
             self._rows = [
-                (row.get("id"), row.get("subtask"), row.get("completed"))
+                (row.get("id"), row.get("subtask"), row.get("completed"), row.get("source"))
                 for row in (response.data or [])
             ]
         elif normalized.startswith("UPDATE SUBTASKS"):
@@ -134,14 +138,18 @@ class _SupabaseCursor:
             self._single_query = True
             response = (
                 self.client.table("daily_reflections")
-                .select("id, reflection_date, feeling, delay_reasons, note, created_at")
+                .select(
+                    "id, reflection_date, feeling, delay_reasons, note, "
+                    "completed_tasks, pending_tasks, total_focus_time, ai_analysis, created_at"
+                )
                 .eq("reflection_date", parameters[0])
                 .limit(1)
                 .execute()
             )
             self._rows = [
                 tuple(row.get(column) for column in (
-                    "id", "reflection_date", "feeling", "delay_reasons", "note", "created_at",
+                    "id", "reflection_date", "feeling", "delay_reasons", "note",
+                    "completed_tasks", "pending_tasks", "total_focus_time", "ai_analysis", "created_at",
                 ))
                 for row in (response.data or [])
             ]
@@ -152,6 +160,10 @@ class _SupabaseCursor:
                 "feeling": parameters[1],
                 "delay_reasons": parameters[2],
                 "note": parameters[3],
+                "completed_tasks": parameters[4],
+                "pending_tasks": parameters[5],
+                "total_focus_time": parameters[6],
+                "ai_analysis": parameters[7],
             }, on_conflict="reflection_date").execute()
         else:
             raise ValueError(f"Unsupported database operation: {query.strip()}")

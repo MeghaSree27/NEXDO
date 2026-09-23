@@ -1,5 +1,6 @@
 ﻿import streamlit as st
 from database import get_connection
+import calendar as calendar_module
 from datetime import date, datetime
 from google import genai
 from google.genai import types
@@ -9,7 +10,7 @@ import re
 
 from streamlit_mic_recorder import speech_to_text
 
-st.set_page_config(page_title="NEXDO", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="RIVO", page_icon="🤖", layout="wide")
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
@@ -32,6 +33,8 @@ if "stuck_breakdown_done" not in st.session_state:
     st.session_state.stuck_breakdown_done = set()
 if "theme" not in st.session_state:
     st.session_state.theme = "light"
+if "tasks_view_open" not in st.session_state:
+    st.session_state.tasks_view_open = False
 
 theme_is_dark = st.session_state.theme == "dark"
 st.markdown(
@@ -42,8 +45,8 @@ st.markdown(
         --panel: {"#172235" if theme_is_dark else "#ffffff"};
         --panel-soft: {"#1d2a40" if theme_is_dark else "#eef3f8"};
         --ink: {"#edf4ff" if theme_is_dark else "#172235"};
-        --muted: {"#a9bad2" if theme_is_dark else "#66758a"};
-        --line: {"#2d405d" if theme_is_dark else "#dbe4ee"};
+        --muted: {"#c7d5e8" if theme_is_dark else "#66758a"};
+        --line: {"#48627f" if theme_is_dark else "#dbe4ee"};
         --accent: #36b7a5;
         --accent-soft: {"#173f45" if theme_is_dark else "#e0f5f1"};
         --button-bg: {"#284b57" if theme_is_dark else "#dceeea"};
@@ -64,6 +67,44 @@ st.markdown(
     .metric-card {{ background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .8rem 1rem; }}
     .metric-label {{ color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }}
     .metric-value {{ color: var(--ink); font-size: 1.45rem; font-weight: 800; }}
+    [data-testid="stDialog"], [data-testid="stDialog"] > div,
+    [role="dialog"], [data-baseweb="modal"], [data-baseweb="modal"] > div,
+    [data-baseweb="popover"] {{ background: var(--panel); color: var(--ink); }}
+    [data-testid="stDialog"] h1, [data-testid="stDialog"] h2,
+    [data-testid="stDialog"] h3, [data-testid="stDialog"] p,
+    [data-testid="stDialog"] label, [role="dialog"] h1,
+    [role="dialog"] h2, [role="dialog"] h3, [role="dialog"] p,
+    [role="dialog"] label {{ color: var(--ink); }}
+    [data-testid="stDialog"] [data-testid="stMarkdownContainer"],
+    [role="dialog"] [data-testid="stMarkdownContainer"] {{ color: var(--ink); }}
+    [data-baseweb="input"], [data-baseweb="textarea"],
+    [data-baseweb="select"] > div, [data-baseweb="input"] > div,
+    [data-baseweb="textarea"] > div {{
+        background: var(--panel-soft); color: var(--ink); border-color: var(--line);
+    }}
+    input, textarea {{ background: var(--panel-soft) !important; color: var(--ink) !important; caret-color: var(--accent); }}
+    input::placeholder, textarea::placeholder {{ color: var(--muted) !important; opacity: 1; }}
+    [data-baseweb="select"] *, [data-baseweb="input"] *,
+    [data-baseweb="textarea"] * {{ color: var(--ink); }}
+    [role="listbox"], [role="option"], [data-baseweb="menu"] {{ background: var(--panel); color: var(--ink); }}
+    [role="option"]:hover, [role="option"][aria-selected="true"] {{ background: var(--accent-soft); color: var(--ink); }}
+    [data-testid="stRadio"] label, [data-testid="stCheckbox"] label,
+    [data-testid="stSelectbox"] label, [data-testid="stNumberInput"] label,
+    [data-testid="stDateInput"] label, [data-testid="stTextInput"] label,
+    [data-testid="stTextArea"] label {{ color: var(--ink) !important; }}
+    [data-testid="stRadio"] span, [data-testid="stCheckbox"] span {{ color: var(--ink); }}
+    [data-testid="stRadio"] [role="radio"], [data-testid="stCheckbox"] [role="checkbox"] {{ border-color: var(--muted); }}
+    [data-testid="stNumberInput"] button, [data-testid="stDateInput"] button {{
+        background: var(--button-bg); color: var(--button-text); border-color: var(--line);
+    }}
+    [data-testid="stMetricLabel"], [data-testid="stMetricValue"],
+    [data-testid="stMetricDelta"] {{ color: var(--ink) !important; }}
+    [data-testid="stProgress"] > div {{ background: var(--panel-soft); }}
+    [data-testid="stProgress"] > div > div {{ background: var(--accent); }}
+    [data-testid="stAlert"] {{ background: var(--panel-soft); color: var(--ink); border-color: var(--line); }}
+    [data-testid="stAlert"] p, [data-testid="stAlert"] div {{ color: var(--ink); }}
+    [data-testid="stDialog"] button[aria-label="Close"],
+    [role="dialog"] button[aria-label="Close"] {{ color: var(--ink); background: transparent; }}
     div.stButton > button {{
         background: var(--button-bg); color: var(--button-text); border: 1px solid var(--line);
         border-radius: 10px; min-height: 2.45rem; font-weight: 650;
@@ -75,8 +116,8 @@ st.markdown(
     div.stButton > button[kind="primary"] {{ background: var(--accent); border-color: var(--accent); color: #071b1a; }}
     div.stButton > button[kind="primary"] p, div.stButton > button[kind="primary"] span {{ color: #071b1a; }}
     div.stButton > button[kind="primary"]:hover {{ background: #2a9d90; color: #061917; }}
-    [data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] {{ background: var(--panel); }}
     [data-testid="stExpander"] {{ border-color: var(--line); background: var(--panel-soft); }}
+    [data-testid="stExpander"] * {{ color: var(--ink); }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -241,8 +282,10 @@ def quick_note_error_message(error):
     return f"{type(error).__name__}: {message}"
 
 
+
 def initialize_quick_note_state():
     defaults = {
+        "quick_notes_view": "list",
         "quick_note_mode": "manual",
         "quick_note_voice_text": "",
         "quick_note_recorder_key": 0,
@@ -251,14 +294,14 @@ def initialize_quick_note_state():
         st.session_state.setdefault(key, value)
 
 
-@st.dialog("📝 Add Quick Note")
 def show_quick_note_dialog():
     initialize_quick_note_state()
+    st.subheader("📄 Add Quick Note")
     mode = st.radio(
         "How would you like to add it?",
         ["✍️ Type Manually", "🎙️ Add Using Voice"],
         index=0 if st.session_state.quick_note_mode == "manual" else 1,
-        key="quick_note_mode_choice",
+        key="quick_note_add_mode",
         horizontal=True,
     )
     st.session_state.quick_note_mode = "manual" if mode.startswith("✍️") else "voice"
@@ -289,7 +332,7 @@ def show_quick_note_dialog():
 
     add_col, cancel_col = st.columns(2)
     with add_col:
-        if st.button("✅ Add Note", type="primary", key="quick_note_add"):
+        if st.button("✅ Save Note", type="primary", key="quick_note_save"):
             if not note_text.strip():
                 st.warning("Please enter a note.")
             else:
@@ -300,20 +343,29 @@ def show_quick_note_dialog():
                 else:
                     st.session_state.quick_note_voice_text = ""
                     st.session_state.quick_note_recorder_key += 1
+                    st.session_state.quick_notes_view = "list"
                     st.success("Quick note added.")
                     st.rerun()
     with cancel_col:
         if st.button("❌ Cancel", key="quick_note_cancel"):
             st.session_state.quick_note_voice_text = ""
             st.session_state.quick_note_recorder_key += 1
+            st.session_state.quick_notes_view = "list"
             st.rerun()
 
 
+@st.dialog("📝 Quick Notes", width="small")
 def render_quick_notes_panel():
+    initialize_quick_note_state()
+    if st.session_state.quick_notes_view == "add":
+        show_quick_note_dialog()
+        return
+
     with st.container(border=True):
         st.subheader("📝 Quick Notes")
         if st.button("+ Add Note", key="open_quick_note", use_container_width=True):
-            show_quick_note_dialog()
+            st.session_state.quick_notes_view = "add"
+            st.rerun()
 
         try:
             notes = load_quick_notes()
@@ -485,7 +537,7 @@ def generate_subtasks(task_title):
     prompt = f"""
 You are an intelligent task management assistant.
 
-Break the following task into meaningful, practical subtasks.46
+Break the following task into meaningful, practical subtasks.
 
 Task:
 {task_title}
@@ -494,7 +546,9 @@ Rules:
 - Give 4 to 7 subtasks.
 - Each subtask must be specific and actionable.
 - Make the subtasks relevant to the actual task.
-- Do not use generic steps like "complete the task".
+- Do not use generic steps like "start the task" or "complete the task".
+- Avoid repeating the task title as a subtask.
+- Each subtask should describe a concrete action for this specific task.
 - Return only the subtasks, one per line.
 """
 
@@ -525,6 +579,34 @@ Rules:
             )
 
             return ""
+
+
+def save_ai_subtasks(task_id, task_title):
+    subtasks = generate_subtasks(task_title)
+    if not subtasks:
+        return False
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        "DELETE FROM subtasks WHERE task_id = ? AND source = ?",
+        (task_id, "ai")
+    )
+
+    for subtask in subtasks.split("\n"):
+        subtask = subtask.strip()
+        if subtask:
+            cursor.execute(
+                """
+                INSERT INTO subtasks (task_id, subtask, source)
+                VALUES (?, ?, ?)
+                """,
+                (task_id, subtask, "ai")
+            )
+
+    connection.commit()
+    connection.close()
+    return True
 
 
 def generate_reschedule_suggestion(task, details):
@@ -572,7 +654,7 @@ If the original deadline is unrealistic, clearly say so and suggest a practical 
 header_left, header_right = st.columns([4, 1])
 with header_left:
     st.markdown('<div class="dashboard-kicker">AI productivity workspace</div>', unsafe_allow_html=True)
-    st.markdown('<div class="dashboard-title">NEXDO</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dashboard-title">RIVO</div>', unsafe_allow_html=True)
     st.markdown('<div class="dashboard-subtitle">Plan smarter. Work better. Stay on track.</div>', unsafe_allow_html=True)
 with header_right:
     st.write("")
@@ -582,13 +664,19 @@ with header_right:
         st.rerun()
 
 st.write("")
-action_left, action_right = st.columns([3, 2])
-with action_left:
+st.caption("Good morning 👋  Ready to get things done?")
+action_one, action_two, action_three = st.columns(3)
+with action_one:
     if st.button("➕ Add Task", type="primary", key="open_add_task"):
         show_add_task_dialog()
-with action_right:
-    render_quick_notes_panel()
-
+with action_two:
+    if st.button("🎙️ Voice Task", key="open_voice_task"):
+        st.session_state.dialog_mode = "voice"
+        show_add_task_dialog()
+with action_three:
+    if st.button("📝 Quick Notes", key="open_quick_notes"):
+        st.session_state.quick_notes_view = "list"
+        render_quick_notes_panel()
 def calculate_smart_score(task):
 
     priority = task[4]
@@ -678,6 +766,276 @@ def get_reschedule_details(task):
         return None
 
 
+def calculate_productivity_metrics(tasks):
+    total_tasks = len(tasks)
+    completed_tasks = sum(task[6] == "Completed" for task in tasks)
+    pending_tasks = total_tasks - completed_tasks
+    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks else 0
+
+    total_focus_seconds = 0
+    for task in tasks:
+        try:
+            total_focus_seconds += max(0, calculate_worked_seconds(task))
+        except (TypeError, ValueError, OverflowError):
+            continue
+
+    today = datetime.now().date()
+    today_tasks = []
+    for task in tasks:
+        if not task[3]:
+            continue
+        try:
+            deadline_date = datetime.fromisoformat(str(task[3])).date()
+        except (TypeError, ValueError):
+            continue
+        if deadline_date == today:
+            today_tasks.append(task)
+
+    today_completed = sum(task[6] == "Completed" for task in today_tasks)
+    today_progress = (today_completed / len(today_tasks)) if today_tasks else 0
+
+    return {
+        "completed_tasks": completed_tasks,
+        "pending_tasks": pending_tasks,
+        "completion_rate": completion_rate,
+        "total_focus_seconds": total_focus_seconds,
+        "today_progress": today_progress,
+        "today_task_count": len(today_tasks),
+    }
+
+
+@st.dialog("📊 Productivity", width="small")
+def render_productivity_section(tasks):
+    metrics = calculate_productivity_metrics(tasks)
+    total_focus_minutes = int(metrics["total_focus_seconds"] // 60)
+    focus_hours, focus_minutes = divmod(total_focus_minutes, 60)
+    focus_label = f"{focus_hours}h {focus_minutes}m" if focus_hours else f"{focus_minutes}m"
+
+    with st.container(border=True):
+        st.subheader("📊 Productivity")
+        metric_left, metric_mid, metric_right = st.columns(3)
+        with metric_left:
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">✅ Completed</div>'
+                f'<div class="metric-value">{metrics["completed_tasks"]}</div></div>',
+                unsafe_allow_html=True,
+            )
+        with metric_mid:
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">⏳ Pending</div>'
+                f'<div class="metric-value">{metrics["pending_tasks"]}</div></div>',
+                unsafe_allow_html=True,
+            )
+        with metric_right:
+            st.markdown(
+                f'<div class="metric-card"><div class="metric-label">📈 Rate</div>'
+                f'<div class="metric-value">{metrics["completion_rate"]:.0f}%</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown(f"**⏱️ Total Focus Time**  \n{focus_label}")
+        st.markdown("**📅 Today's Progress**")
+        if metrics["today_task_count"]:
+            st.progress(metrics["today_progress"], text=f"{metrics['today_progress']:.0%}")
+        else:
+            st.progress(0, text="0%")
+            st.caption("No tasks due today.")
+
+
+def calculate_daily_reflection_stats(tasks, reflection_date):
+    relevant_tasks = []
+    for task in tasks:
+        deadline_date = parse_task_deadline_date(task[3])
+        if deadline_date == reflection_date:
+            relevant_tasks.append(task)
+
+    completed_tasks = sum(task[6] == "Completed" for task in relevant_tasks)
+    pending_tasks = sum(task[6] != "Completed" for task in relevant_tasks)
+    total_focus_seconds = 0
+    for task in relevant_tasks:
+        try:
+            total_focus_seconds += max(0, calculate_worked_seconds(task))
+        except (TypeError, ValueError, OverflowError):
+            continue
+
+    return {
+        "completed_tasks": completed_tasks,
+        "pending_tasks": pending_tasks,
+        "total_focus_time": int(total_focus_seconds),
+        "relevant_tasks": relevant_tasks,
+    }
+
+
+def generate_daily_reflection_analysis(mood, reflection_text, stats):
+    if client is None:
+        return ""
+
+    task_lines = "\n".join(
+        f"- {task[1]}: {task[6]}, priority {task[4]}, deadline {task[3]}"
+        for task in stats["relevant_tasks"]
+    ) or "No tasks were associated with this date."
+    prompt = f"""
+Write a concise productivity-focused daily analysis from only the supplied data.
+Do not invent tasks, time, emotions, achievements, or reasons. Do not diagnose
+mental or physical health. Mention unavailable information only as unavailable,
+and keep the result to 2 or 3 sentences.
+
+Mood: {mood}
+User reflection: {reflection_text or "No reflection text provided."}
+Completed tasks associated with this date: {stats["completed_tasks"]}
+Pending tasks associated with this date: {stats["pending_tasks"]}
+Actual tracked focus time in seconds: {stats["total_focus_time"]}
+Task activity:
+{task_lines}
+"""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=prompt,
+        )
+        analysis = getattr(response, "text", None)
+        return analysis.strip() if isinstance(analysis, str) else ""
+    except Exception:
+        return ""
+
+
+def parse_task_deadline_date(deadline):
+    if not deadline:
+        return None
+
+    try:
+        deadline_text = str(deadline).strip()
+        return date.fromisoformat(deadline_text[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def get_calendar_tasks(tasks):
+    tasks_by_date = {}
+    numbered_tasks = {}
+    for display_number, task in enumerate(tasks, start=1):
+        numbered_tasks[task[0]] = display_number
+        deadline_date = parse_task_deadline_date(task[3])
+        if deadline_date:
+            tasks_by_date.setdefault(deadline_date, []).append(task)
+    return tasks_by_date, numbered_tasks
+
+
+def shift_calendar_month(month_start, month_delta):
+    month_index = month_start.year * 12 + month_start.month - 1 + month_delta
+    year, month_index = divmod(month_index, 12)
+    return date(year, month_index + 1, 1)
+
+
+def select_calendar_date(calendar_date):
+    st.session_state.calendar_selected_date = calendar_date
+
+
+def navigate_calendar_month(month_delta):
+    next_month = shift_calendar_month(st.session_state.calendar_month, month_delta)
+    st.session_state.calendar_month = next_month
+    st.session_state.calendar_selected_date = next_month
+
+
+def select_calendar_today():
+    today = datetime.now().date()
+    st.session_state.calendar_month = date(today.year, today.month, 1)
+    st.session_state.calendar_selected_date = today
+
+
+@st.dialog("📅 Calendar", width="medium")
+def render_calendar_section(tasks):
+    today = datetime.now().date()
+    st.session_state.setdefault("calendar_month", date(today.year, today.month, 1))
+    st.session_state.setdefault("calendar_selected_date", today)
+
+    tasks_by_date, numbered_tasks = get_calendar_tasks(tasks)
+    month_start = st.session_state.calendar_month
+    selected_date = st.session_state.calendar_selected_date
+
+    previous_col, current_col, next_col = st.columns([1, 3, 1])
+    with previous_col:
+        st.button(
+            "‹",
+            key="calendar_previous",
+            help="Previous month",
+            on_click=navigate_calendar_month,
+            args=(-1,),
+        )
+    with current_col:
+        st.markdown(
+            f"<div style='text-align:center; font-weight:700; padding:.2rem 0'>"
+            f"{month_start.strftime('%B %Y')}</div>",
+            unsafe_allow_html=True,
+        )
+        st.button(
+            "Today",
+            key="calendar_today",
+            use_container_width=True,
+            on_click=select_calendar_today,
+        )
+    with next_col:
+        st.button(
+            "›",
+            key="calendar_next",
+            help="Next month",
+            on_click=navigate_calendar_month,
+            args=(1,),
+        )
+
+    weekday_columns = st.columns(7)
+    for weekday_column, weekday_name in zip(weekday_columns, ("M", "T", "W", "T", "F", "S", "S")):
+        with weekday_column:
+            st.caption(weekday_name)
+
+    month_days = calendar_module.monthrange(month_start.year, month_start.month)[1]
+    leading_days = month_start.weekday()
+    calendar_cells = [None] * leading_days + [
+        date(month_start.year, month_start.month, day)
+        for day in range(1, month_days + 1)
+    ]
+    while len(calendar_cells) % 7:
+        calendar_cells.append(None)
+
+    for week_start in range(0, len(calendar_cells), 7):
+        day_columns = st.columns(7)
+        for day_column, calendar_date in zip(day_columns, calendar_cells[week_start:week_start + 7]):
+            with day_column:
+                if calendar_date is None:
+                    st.write("")
+                    continue
+                date_tasks = tasks_by_date.get(calendar_date, [])
+                task_marker = f" •{len(date_tasks)}" if date_tasks else ""
+                button_type = "primary" if calendar_date == today else "secondary"
+                st.button(
+                    f"{calendar_date.day}{task_marker}",
+                    key=f"calendar_day_{calendar_date.isoformat()}",
+                    type=button_type,
+                    use_container_width=True,
+                    on_click=select_calendar_date,
+                    args=(calendar_date,),
+                )
+
+    st.divider()
+    selected_date = st.session_state.calendar_selected_date
+    selected_tasks = tasks_by_date.get(selected_date, [])
+    selected_date_label = f"{selected_date.strftime('%B')} {selected_date.day}, {selected_date.year}"
+    st.markdown(f"**📋 Tasks for {selected_date_label}**")
+    if not selected_tasks:
+        st.caption("No tasks due on this date.")
+    else:
+        for task in selected_tasks:
+            display_number = numbered_tasks.get(task[0])
+            deadline_text = str(task[3]) if task[3] else "No deadline"
+            st.markdown(
+                f"**{display_number}. {task[1]}**  \n"
+                f"Priority: {task[4]}  \n"
+                f"Deadline: {deadline_text}  \n"
+                f"Status: {task[6]}"
+            )
+
+
 @st.dialog("🌱 Mood & Reflection")
 def show_reflection_dialog(current_tasks):
     completed_count = sum(task[6] == "Completed" for task in current_tasks)
@@ -701,7 +1059,7 @@ def show_reflection_dialog(current_tasks):
             (today,)
         )
         saved_reflection = reflection_cursor.fetchone()
-        if not saved_reflection or len(saved_reflection) < 6:
+        if not saved_reflection or len(saved_reflection) < 10:
             saved_reflection = None
         reflection_connection.close()
     except Exception:
@@ -743,6 +1101,21 @@ def show_reflection_dialog(current_tasks):
         key="reflection_note"
     )
 
+    if saved_reflection:
+        saved_focus_seconds = int(saved_reflection[7] or 0)
+        saved_focus_hours, saved_focus_minutes = divmod(saved_focus_seconds // 60, 60)
+        saved_focus_label = (
+            f"{saved_focus_hours}h {saved_focus_minutes}m"
+            if saved_focus_hours else f"{saved_focus_minutes}m"
+        )
+        st.markdown("**📊 Today's Work**")
+        st.write(f"Completed: {saved_reflection[5] or 0}")
+        st.write(f"Pending: {saved_reflection[6] or 0}")
+        st.write(f"Focus Time: {saved_focus_label}")
+        if saved_reflection[8]:
+            st.markdown("**🧠 Daily Insight**")
+            st.info(saved_reflection[8])
+
     if st.button("💾 Save Reflection", type="primary", key="dialog_save_reflection"):
         if feeling == "Select one...":
             st.warning("Please select how today felt before saving.")
@@ -750,24 +1123,50 @@ def show_reflection_dialog(current_tasks):
             st.error("Reflection could not be saved until the daily_reflections table is created.")
         else:
             try:
+                reflection_date = datetime.now().date()
+                daily_stats = calculate_daily_reflection_stats(current_tasks, reflection_date)
+                ai_analysis = generate_daily_reflection_analysis(
+                    feeling,
+                    reflection_note.strip(),
+                    daily_stats,
+                )
                 reflection_connection = get_connection()
                 reflection_cursor = reflection_connection.cursor()
                 reflection_cursor.execute(
                     """
                     UPSERT INTO daily_reflections
-                    (reflection_date, feeling, delay_reasons, note)
-                    VALUES (?, ?, ?, ?)
+                    (reflection_date, feeling, delay_reasons, note,
+                     completed_tasks, pending_tasks, total_focus_time, ai_analysis)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (today, feeling, selected_delay_reasons, reflection_note.strip())
+                    (
+                        today,
+                        feeling,
+                        selected_delay_reasons,
+                        reflection_note.strip(),
+                        daily_stats["completed_tasks"],
+                        daily_stats["pending_tasks"],
+                        daily_stats["total_focus_time"],
+                        ai_analysis,
+                    )
                 )
                 reflection_connection.commit()
                 reflection_connection.close()
-                st.success("✅ Reflection saved successfully.")
+                st.success("✅ Today's reflection saved.")
+                st.markdown("**📊 Today's Work**")
+                st.write(f"Completed: {daily_stats['completed_tasks']}")
+                st.write(f"Pending: {daily_stats['pending_tasks']}")
+                focus_minutes = daily_stats["total_focus_time"] // 60
+                focus_hours, focus_minutes = divmod(focus_minutes, 60)
+                st.write(f"Focus Time: {focus_hours}h {focus_minutes}m")
+                if ai_analysis:
+                    st.markdown("**🧠 Daily Insight**")
+                    st.info(ai_analysis)
+                elif client is not None:
+                    st.warning("Today's reflection was saved, but a Daily Insight could not be generated.")
             except Exception as e:
                 st.error(f"Reflection could not be saved: {e}")
 
-
-st.header("📋 My Tasks")
 
 connection = get_connection()
 cursor = connection.cursor()
@@ -782,51 +1181,68 @@ tasks = cursor.fetchall()
 
 connection.close()
 
-summary_left, summary_mid, summary_right = st.columns(3)
-with summary_left:
-    st.markdown(f'<div class="metric-card"><div class="metric-label">📋 Total Tasks</div><div class="metric-value">{len(tasks)}</div></div>', unsafe_allow_html=True)
-with summary_mid:
-    in_progress_count = sum(task[6] == "In Progress" for task in tasks)
-    st.markdown(f'<div class="metric-card"><div class="metric-label">▶ In Progress</div><div class="metric-value">{in_progress_count}</div></div>', unsafe_allow_html=True)
-with summary_right:
+active_tasks = sorted(
+    (task for task in tasks if task[6] != "Completed"),
+    key=calculate_smart_score,
+    reverse=True,
+)
+completed_tasks = [task for task in tasks if task[6] == "Completed"]
+tasks = active_tasks + completed_tasks
+
+active_count = sum(task[6] != "Completed" for task in tasks)
+today = datetime.now().date()
+due_today_count = sum(parse_task_deadline_date(task[3]) == today for task in tasks if task[6] != "Completed")
+estimated_workload = sum(
+    max(float(task[5] or 0), 0)
+    for task in tasks
+    if task[6] != "Completed" and str(task[5] or "").replace(".", "", 1).isdigit()
+)
+estimated_hours, estimated_minutes = divmod(int(estimated_workload * 60), 60)
+
+with st.container(border=True):
+    st.markdown("### 🎯 My Workspace")
+    workspace_left, workspace_mid, workspace_right = st.columns(3)
+    with workspace_left:
+        st.metric("Active Tasks", active_count)
+    with workspace_mid:
+        st.metric("Due Today", due_today_count)
+    with workspace_right:
+        st.metric("Estimated Workload", f"{estimated_hours}h {estimated_minutes}m")
+    if st.button("📋 My Tasks", type="primary", key="open_tasks_workspace"):
+        st.session_state.tasks_view_open = True
+
+feature_left, feature_mid, feature_right = st.columns(3)
+with feature_left:
+    if st.button("📅 Calendar", key="open_calendar"):
+        render_calendar_section(tasks)
+with feature_mid:
+    if st.button("🌙 Reflection", key="open_reflection"):
+        show_reflection_dialog(tasks)
+with feature_right:
+    if st.button("📊 Productivity", key="open_productivity"):
+        render_productivity_section(tasks)
+
+st.markdown("### 📈 At A Glance")
+glance_left, glance_mid, glance_right = st.columns(3)
+with glance_left:
+    st.markdown(f'<div class="metric-card"><div class="metric-label">🟢 Active Tasks</div><div class="metric-value">{active_count}</div></div>', unsafe_allow_html=True)
+with glance_mid:
+    focus_minutes = int(sum(max(calculate_worked_seconds(task), 0) for task in tasks) // 60)
+    focus_hours, focus_minutes = divmod(focus_minutes, 60)
+    st.markdown(f'<div class="metric-card"><div class="metric-label">⏱ Focus Time</div><div class="metric-value">{focus_hours}h {focus_minutes}m</div></div>', unsafe_allow_html=True)
+with glance_right:
     completed_count = sum(task[6] == "Completed" for task in tasks)
-    st.markdown(f'<div class="metric-card"><div class="metric-label">✅ Completed</div><div class="metric-value">{completed_count}</div></div>', unsafe_allow_html=True)
+    completion_rate = completed_count / len(tasks) * 100 if tasks else 0
+    st.markdown(f'<div class="metric-card"><div class="metric-label">✓ Completion Rate</div><div class="metric-value">{completion_rate:.0f}%</div></div>', unsafe_allow_html=True)
 
-st.write("")
-if st.button("🌱 Mood & Reflection", key="open_reflection"):
-    show_reflection_dialog(tasks)
+if st.session_state.tasks_view_open:
+    st.header("📋 My Tasks")
+    if st.button("✕ Close Tasks", key="close_tasks_workspace"):
+        st.session_state.tasks_view_open = False
+        st.rerun()
 
 
-if tasks:
-    pending_tasks = [
-    task for task in tasks
-    if task[6] != "Completed"
-]
-
-    if pending_tasks:
-
-        recommended_task = max(
-        pending_tasks,
-        key=calculate_smart_score
-        )
-
-        recommended_score = calculate_smart_score(recommended_task)
-
-        st.header("🧠 What Should I Do Now?")
-
-        st.success(
-        f"🎯 Recommended Task: {recommended_task[1]}"
-        )
-
-        st.write(
-            f"**Reason:** Priority: {recommended_task[4]} | "
-            f"Deadline: {recommended_task[3]}"
-        )
-
-        st.write(
-            f"**Smart Score:** {recommended_score}"
-        )
-
+if tasks and st.session_state.tasks_view_open:
     for display_number, task in enumerate(tasks, start=1):
 
         if st.button(
@@ -835,49 +1251,17 @@ if tasks:
         ):
 
             with st.spinner("🤖 Gemini is analyzing your task..."):
+                generated = save_ai_subtasks(task[0], task[1])
 
-               subtasks = generate_subtasks(task[1])
-
-            if subtasks:
-
-                connection = get_connection()
-                cursor = connection.cursor()
-
-                # Remove old subtasks for this task
-                cursor.execute(
-                    "DELETE FROM subtasks WHERE task_id = ?",
-                    (task[0],)
-                )
-
-                # Split Gemini response into individual subtasks
-                subtask_list = subtasks.split("\n")
-
-                for subtask in subtask_list:
-
-                    subtask = subtask.strip()
-
-                    if subtask:
-                        cursor.execute(
-                            """
-                            INSERT INTO subtasks (task_id, subtask)
-                            VALUES (?, ?)
-                            """,
-                            (task[0], subtask)
-                        )
-
-                connection.commit()
-                connection.close()
-
+            if generated:
                 st.success("✅ AI subtasks generated and saved!")
-           
 
-                # Show saved subtasks
         connection = get_connection()
         cursor = connection.cursor()
     
         cursor.execute(
             """
-            SELECT id, subtask, completed
+            SELECT id, subtask, completed, source
             FROM subtasks
             WHERE task_id = ?
             """,
@@ -889,22 +1273,20 @@ if tasks:
         connection.close()
     
         if tasks:
-    
             if saved_subtasks:
                 st.subheader("🧠 AI Suggested Subtasks")
     
             for subtask in saved_subtasks:
-    
-                checkbox = st.checkbox(
-                    subtask[1],
-                    value=(subtask[2] == 1),
-                    key=f"subtask_{subtask[0]}"
-                )
-    
-                # Save checkbox state
+                subtask_col, delete_col = st.columns([8, 1])
+                with subtask_col:
+                    checkbox = st.checkbox(
+                        subtask[1],
+                        value=(subtask[2] == 1),
+                        key=f"subtask_{subtask[0]}"
+                    )
+
                 connection = get_connection()
                 cursor = connection.cursor()
-    
                 cursor.execute(
                     """
                     UPDATE subtasks
@@ -913,9 +1295,48 @@ if tasks:
                     """,
                     (1 if checkbox else 0, subtask[0])
                 )
-    
                 connection.commit()
                 connection.close()
+
+                with delete_col:
+                    if st.button("🗑️", key=f"delete_subtask_{subtask[0]}", help="Remove this subtask"):
+                        connection = get_connection()
+                        cursor = connection.cursor()
+                        cursor.execute("DELETE FROM subtasks WHERE id = ?", (subtask[0],))
+                        connection.commit()
+                        connection.close()
+                        st.rerun()
+
+            custom_col, custom_button_col = st.columns([8, 1])
+            with custom_col:
+                custom_subtask = st.text_input(
+                    "Add My Own Subtask",
+                    key=f"custom_subtask_{task[0]}",
+                    placeholder="Enter your subtask...",
+                    label_visibility="collapsed",
+                )
+            with custom_button_col:
+                if st.button("Add", key=f"add_subtask_{task[0]}"):
+                    if custom_subtask.strip():
+                        connection = get_connection()
+                        cursor = connection.cursor()
+                        cursor.execute(
+                            """
+                            INSERT INTO subtasks (task_id, subtask, source)
+                            VALUES (?, ?, ?)
+                            """,
+                            (task[0], custom_subtask.strip(), "manual")
+                        )
+                        connection.commit()
+                        connection.close()
+                        st.rerun()
+
+            if st.button("🔄 Regenerate Suggestions", key=f"regenerate_subtasks_{task[0]}"):
+                with st.spinner("🤖 Gemini is generating fresh suggestions..."):
+                    generated = save_ai_subtasks(task[0], task[1])
+                if generated:
+                    st.success("✅ AI suggestions regenerated. Your subtasks were kept.")
+                    st.rerun()
     
             # Get updated progress from database
             connection = get_connection()
@@ -995,30 +1416,9 @@ if tasks:
                     elif stuck_reason == "Task is too big":
                         if task[0] not in st.session_state.stuck_breakdown_done:
                             with st.spinner("🤖 Gemini is breaking this task into smaller steps..."):
-                                subtasks = generate_subtasks(task[1])
-    
-                            if subtasks:
-                                connection = get_connection()
-                                cursor = connection.cursor()
-    
-                                cursor.execute(
-                                    "DELETE FROM subtasks WHERE task_id = ?",
-                                    (task[0],)
-                                )
-    
-                                for subtask in subtasks.split("\n"):
-                                    subtask = subtask.strip()
-                                    if subtask:
-                                        cursor.execute(
-                                            """
-                                            INSERT INTO subtasks (task_id, subtask)
-                                            VALUES (?, ?)
-                                            """,
-                                            (task[0], subtask)
-                                        )
-    
-                                connection.commit()
-                                connection.close()
+                                generated = save_ai_subtasks(task[0], task[1])
+
+                            if generated:
                                 st.session_state.stuck_breakdown_done.add(task[0])
                                 st.success("✅ Task broken into smaller steps!")
                         else:
@@ -1035,17 +1435,12 @@ if tasks:
                         )
     
             with st.container(border=True):
-                st.subheader(f"{display_number}. 🆔 Task #{task[0]} — {task[1]}")
+                st.subheader(f"{display_number}. {task[1]}")
         
                 st.write("**Description:**", task[2])
                 st.write("**Deadline:**", task[3])
                 st.write("**Priority:**", task[4])
-                if smart_score >= 70:
-                    st.error("🤖 Recommendation: Work on this task first!")
-                elif smart_score >= 50:
-                    st.warning("🤖 Recommendation: Work on this task soon.")
-                else:
-                    st.info("🤖 Recommendation: This task can wait.")
+                st.write("**Smart Score:**", smart_score)
                 st.write("**Estimated time:**", task[5], "hours")
                 st.write("**Status:**", task[6])
         
@@ -1218,7 +1613,7 @@ if tasks:
     
                     st.rerun()
     
-else:
+elif not tasks:
 
     st.info("No tasks added yet.")
 
