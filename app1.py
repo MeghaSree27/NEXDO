@@ -18,7 +18,6 @@ if not API_KEY:
         API_KEY = st.secrets["GEMINI_API_KEY"]
     except (KeyError, FileNotFoundError):
         API_KEY = None
-
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 if "reschedule_suggestions" not in st.session_state:
@@ -326,7 +325,7 @@ def show_quick_note_dialog():
         if st.button("🎙️ Try Again", key="quick_note_retry"):
             st.session_state.quick_note_voice_text = ""
             st.session_state.quick_note_recorder_key += 1
-            st.rerun()
+            st.rerun(scope="fragment")
     else:
         note_text = st.text_area("What should you remember?", key="quick_note_manual_input")
 
@@ -345,13 +344,13 @@ def show_quick_note_dialog():
                     st.session_state.quick_note_recorder_key += 1
                     st.session_state.quick_notes_view = "list"
                     st.success("Quick note added.")
-                    st.rerun()
+                    st.rerun(scope="fragment")
     with cancel_col:
         if st.button("❌ Cancel", key="quick_note_cancel"):
             st.session_state.quick_note_voice_text = ""
             st.session_state.quick_note_recorder_key += 1
             st.session_state.quick_notes_view = "list"
-            st.rerun()
+            st.rerun(scope="fragment")
 
 
 @st.dialog("📝 Quick Notes", width="small")
@@ -365,7 +364,7 @@ def render_quick_notes_panel():
         st.subheader("📝 Quick Notes")
         if st.button("+ Add Note", key="open_quick_note", use_container_width=True):
             st.session_state.quick_notes_view = "add"
-            st.rerun()
+            st.rerun(scope="fragment")
 
         try:
             notes = load_quick_notes()
@@ -389,7 +388,7 @@ def render_quick_notes_panel():
                     except Exception as error:
                         st.error(f"Quick Note delete error: {quick_note_error_message(error)}")
                     else:
-                        st.rerun()
+                        st.rerun(scope="fragment")
             if display_number < len(notes):
                 st.markdown("---")
 
